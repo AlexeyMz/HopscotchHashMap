@@ -14,13 +14,13 @@ namespace HopscotchHashMap
     {
         const int HashMask = 0x7FFFFFFF;
         const int EmptyHash = -1;
-        const int BusyHash = -1;
+        const int BusyHash = -2;
 
         const int HopRange = 32;
         const int InsertRange = 4 * 1024;
         const int ResizeFactor = 2;
 
-        struct Bucket
+        public struct Bucket
         {
             public volatile uint hopInfo;
 		    public volatile int hash;
@@ -36,7 +36,7 @@ namespace HopscotchHashMap
             }
         }
 
-        class Segment
+        private sealed class Segment
         {
             public int timestamp;
         }
@@ -47,11 +47,11 @@ namespace HopscotchHashMap
 	    volatile int segmentMask;
 	    volatile int bucketMask;
 	    volatile Segment[] segments;
-	    volatile Bucket[] table;
+	    public volatile Bucket[] table;
 
         public int Capacity => bucketMask;
 
-        public int Count
+        public int ApproximateCount
         {
             get
             {
@@ -95,9 +95,26 @@ namespace HopscotchHashMap
             {
                 table[i].Init();
             }
+
+            Interlocked.MemoryBarrier();
 	    }
 
-        private void FindCloserFreeBacket(Segment startSegment, ref int freeBacket, ref int freeDistance)
+        private HopscotchMap(HopscotchMap<TKey, TValue> original)
+        {
+            keyComparer = original.keyComparer;
+            segmentShift = original.segmentShift;
+            segmentMask = original.segmentMask;
+            bucketMask = original.bucketMask;
+            segments = new Segment[original.segments.Length];
+            for (int i = 0; i < segments.Length; i++)
+            {
+                segments[i] = new Segment();
+                segments[i].timestamp = original.segments[i].timestamp;
+            }
+            table = (Bucket[])original.table.Clone();
+        }
+
+        private bool FindCloserFreeBacket(Segment startSegment, ref int freeBacket, ref int freeDistance)
         {
             int moveBacket = freeBacket - (HopRange - 1);
 
@@ -124,22 +141,22 @@ namespace HopscotchHashMap
 
 				    if (startHopInfo == table[moveBacket].hopInfo) {
 					    int newFreeBacket = moveBacket + moveNewFreeDistance;
-					    table[freeBacket].data = table[newFreeBacket].data;
+                        table[moveBacket].hopInfo |= (1u << moveFreeDist);
+                        table[freeBacket].data = table[newFreeBacket].data;
 					    table[freeBacket].key = table[newFreeBacket].key;
-					    table[freeBacket].hash = table[newFreeBacket].hash;
+                        table[freeBacket].hash = table[newFreeBacket].hash;
                         
                         Interlocked.Increment(ref moveSegment.timestamp);
 
-					    table[moveBacket].hopInfo |= (1u << moveFreeDist);
 					    table[moveBacket].hopInfo &= ~(1u << moveNewFreeDistance);
 
+                        freeDistance -= (freeBacket - newFreeBacket); // new
                         freeBacket = newFreeBacket;
-
-                        freeDistance -= moveFreeDist;
+                        //freeDistance -= moveFreeDist; ERROR in article
 
                         if (startSegment != moveSegment)
                             Monitor.Exit(moveSegment);
-					    return;
+					    return true;
 				    }
 				    if (startSegment != moveSegment)
 					    Monitor.Exit(moveSegment);
@@ -148,10 +165,13 @@ namespace HopscotchHashMap
 			    ++moveBacket;
 		    }
 
-            freeBacket = 0;
-
-            freeDistance = 0;
+            return false;
 	    }
+
+        public HopscotchMap<TKey, TValue> Clone()
+        {
+            return new HopscotchMap<TKey, TValue>(this);
+        }
 
         private bool BucketContainsKey(ref Bucket bucket, TKey key, int keyHash)
         {
@@ -179,7 +199,7 @@ namespace HopscotchHashMap
             //    return BucketContainsKey(ref table[currElmBucket], key, hash);
             //}
 
-            int startTimestamp = segment.timestamp;
+            int startTimestamp = Volatile.Read(ref segment.timestamp);
 		    while (hopInfo != 0)
             {
 			    int i = IndexOfLeastSignificantBitSet(hopInfo);
@@ -189,7 +209,7 @@ namespace HopscotchHashMap
 			    hopInfo &= ~(1u << i);
 		    }
             
-		    if (segment.timestamp == startTimestamp)
+		    if (Volatile.Read(ref segment.timestamp) == startTimestamp)
 			    return false;
             
 		    int currBucket = hash & bucketMask;
@@ -200,8 +220,6 @@ namespace HopscotchHashMap
 		    }
 		    return false;
 	    }
-
-        
 
         public PutResult PutIfAbsent(TKey key,  TValue data)
         {
@@ -250,14 +268,13 @@ namespace HopscotchHashMap
 					    Monitor.Exit(segment);
 					    return PutResult.Success;
 				    }
-
-                    FindCloserFreeBacket(segment, ref freeBucket, ref freeDistance);
 			    }
-                while (0 != freeBucket);
+                while (FindCloserFreeBacket(segment, ref freeBucket, ref freeDistance));
 		    }
 
             // need to resize
             //throw new InvalidOperationException($"Resize is not implemented yet (current size: {Count})");
+            Monitor.Exit(segment);
             return PutResult.Overflow;
 	    }
 
@@ -300,13 +317,14 @@ namespace HopscotchHashMap
 		    do
             {
 			    int i = IndexOfLeastSignificantBitSet(hopInfo);
+                if (i < 0) { throw new InvalidOperationException(); }
                 int currElmBucket = startBucket + i;
 			    if (BucketContainsKey(ref table[currElmBucket], key, hash))
                 {
 				    uint mask = 1u << i;
 				    table[startBucket].hopInfo &= ~mask;
 				    table[currElmBucket].hash = EmptyHash;
-				    table[currElmBucket].key = default(TKey);
+                    table[currElmBucket].key = default(TKey);
 				    data = table[currElmBucket].data;
                     table[currElmBucket].data = default(TValue);
                     Monitor.Exit(segment);
