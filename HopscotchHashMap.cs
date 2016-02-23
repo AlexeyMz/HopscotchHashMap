@@ -150,9 +150,9 @@ namespace HopscotchHashMap
 
 					    table[moveBacket].hopInfo &= ~(1u << moveNewFreeDistance);
 
-                        freeDistance -= (freeBacket - newFreeBacket); // new
+                        freeDistance -= (freeBacket - newFreeBacket); // the correct way
                         freeBacket = newFreeBacket;
-                        //freeDistance -= moveFreeDist; ERROR in article
+                        //freeDistance -= moveFreeDist; // error in article
 
                         if (startSegment != moveSegment)
                             Monitor.Exit(moveSegment);

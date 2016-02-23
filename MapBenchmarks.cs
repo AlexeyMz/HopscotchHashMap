@@ -82,7 +82,6 @@ namespace HopscotchHashMap
             var clone = map;
             for (int i = 0; i < capacity * 1000; i++)
             {
-                // (1/3) -> remove, (2/3) -> insert
                 if (random.Next(100) < 40 || bag.Count > capacity * 2 / 3)
                 {
                     int element;
@@ -100,7 +99,6 @@ namespace HopscotchHashMap
                 else
                 {
                     int key = random.Next(capacity * 3);
-                    //var origninal = map.Clone();
                     var result = map.PutIfAbsent(key, key);
 
                     if (result == PutResult.Success)
@@ -121,7 +119,6 @@ namespace HopscotchHashMap
             var clone = map;
             for (int i = 0; i < capacity * 1000; i++)
             {
-                // (1/3) -> remove, (2/3) -> insert
                 if (random.Next(100) < 40 || bag.Count > capacity * 2 / 3)
                 {
                     int element;
@@ -139,7 +136,6 @@ namespace HopscotchHashMap
                 else
                 {
                     int key = random.Next(capacity * 3);
-                    //var origninal = map.Clone();
                     var result = map.TryAdd(key, key);
 
                     if (result)
