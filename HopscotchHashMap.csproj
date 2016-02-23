@@ -33,12 +33,8 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="NBench, Version=0.1.6.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\NBench.Runner.0.1.6\lib\net45\NBench.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="NBench.Runner, Version=0.1.6.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\NBench.Runner.0.1.6\lib\net45\NBench.Runner.exe</HintPath>
+    <Reference Include="BenchmarkDotNet, Version=0.9.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>packages\BenchmarkDotNet.0.9.1\lib\net40\BenchmarkDotNet.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
@@ -51,7 +47,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Benchmarks.cs" />
+    <Compile Include="MapBenchmarks.cs" />
     <Compile Include="HopscotchHashMap.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

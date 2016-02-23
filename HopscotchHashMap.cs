@@ -68,7 +68,7 @@ namespace HopscotchHashMap
             }
         }
 
-        public HopscotchMap(int initialCapacity, int concurrencyLevel)
+        public HopscotchMap(int concurrencyLevel, int initialCapacity)
 	    {
             checked
             {
