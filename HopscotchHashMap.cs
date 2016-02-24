@@ -20,14 +20,14 @@ namespace HopscotchHashMap
         const int InsertRange = 4 * 1024;
         const int ResizeFactor = 2;
 
-        public struct Bucket
+        private struct Bucket
         {
             public volatile uint hopInfo;
-		    public volatile int hash;
-		    public TKey key;
-		    public TValue data;
+            public volatile int hash;
+            public TKey key;
+            public TValue data;
             
-		    public void Init()
+            public void Init()
             {
                 hopInfo = 0;
                 hash = EmptyHash;
@@ -44,10 +44,10 @@ namespace HopscotchHashMap
         IEqualityComparer<TKey> keyComparer = EqualityComparer<TKey>.Default;
 
         volatile int segmentShift;
-	    volatile int segmentMask;
-	    volatile int bucketMask;
-	    volatile Segment[] segments;
-	    public volatile Bucket[] table;
+        volatile int segmentMask;
+        volatile int bucketMask;
+        volatile Segment[] segments;
+        volatile Bucket[] table;
 
         public int Capacity => bucketMask;
 
@@ -69,7 +69,7 @@ namespace HopscotchHashMap
         }
 
         public HopscotchMap(int concurrencyLevel, int initialCapacity)
-	    {
+        {
             checked
             {
                 segmentMask = (int)(NearestPowerOfTwo((uint)concurrencyLevel) - 1);
@@ -86,7 +86,7 @@ namespace HopscotchHashMap
                 table = new Bucket[numBuckets];
             }
 
-		    for (int i = 0; i < segments.Length; ++i)
+            for (int i = 0; i < segments.Length; ++i)
             {
                 segments[i] = new Segment();
             }
@@ -97,58 +97,43 @@ namespace HopscotchHashMap
             }
 
             Interlocked.MemoryBarrier();
-	    }
-
-        private HopscotchMap(HopscotchMap<TKey, TValue> original)
-        {
-            keyComparer = original.keyComparer;
-            segmentShift = original.segmentShift;
-            segmentMask = original.segmentMask;
-            bucketMask = original.bucketMask;
-            segments = new Segment[original.segments.Length];
-            for (int i = 0; i < segments.Length; i++)
-            {
-                segments[i] = new Segment();
-                segments[i].timestamp = original.segments[i].timestamp;
-            }
-            table = (Bucket[])original.table.Clone();
         }
 
         private bool FindCloserFreeBacket(Segment startSegment, ref int freeBacket, ref int freeDistance)
         {
             int moveBacket = freeBacket - (HopRange - 1);
 
-		    for (int moveFreeDist = HopRange - 1; moveFreeDist > 0; --moveFreeDist) {
-			    uint startHopInfo = table[moveBacket].hopInfo;
+            for (int moveFreeDist = HopRange - 1; moveFreeDist > 0; --moveFreeDist) {
+                uint startHopInfo = table[moveBacket].hopInfo;
 
                 int moveNewFreeDistance = -1;
                 uint mask = 1;
-			    for (int i = 0; i < moveFreeDist; ++i, mask <<= 1)
+                for (int i = 0; i < moveFreeDist; ++i, mask <<= 1)
                 {
-				    if ((mask & startHopInfo) != 0)
+                    if ((mask & startHopInfo) != 0)
                     {
                         moveNewFreeDistance = i;
-					    break;
-				    }
+                        break;
+                    }
                 }
 
-			    if (moveNewFreeDistance != -1)
+                if (moveNewFreeDistance != -1)
                 {
-				    Segment moveSegment = segments[((uint)moveBacket >> segmentShift) & segmentMask];
-				
-				    if (startSegment != moveSegment)
-					    Monitor.Enter(moveSegment);
+                    Segment moveSegment = segments[((uint)moveBacket >> segmentShift) & segmentMask];
+                
+                    if (startSegment != moveSegment)
+                        Monitor.Enter(moveSegment);
 
-				    if (startHopInfo == table[moveBacket].hopInfo) {
-					    int newFreeBacket = moveBacket + moveNewFreeDistance;
+                    if (startHopInfo == table[moveBacket].hopInfo) {
+                        int newFreeBacket = moveBacket + moveNewFreeDistance;
                         table[moveBacket].hopInfo |= (1u << moveFreeDist);
                         table[freeBacket].data = table[newFreeBacket].data;
-					    table[freeBacket].key = table[newFreeBacket].key;
+                        table[freeBacket].key = table[newFreeBacket].key;
                         table[freeBacket].hash = table[newFreeBacket].hash;
                         
                         Interlocked.Increment(ref moveSegment.timestamp);
 
-					    table[moveBacket].hopInfo &= ~(1u << moveNewFreeDistance);
+                        table[moveBacket].hopInfo &= ~(1u << moveNewFreeDistance);
 
                         freeDistance -= (freeBacket - newFreeBacket); // the correct way
                         freeBacket = newFreeBacket;
@@ -156,21 +141,16 @@ namespace HopscotchHashMap
 
                         if (startSegment != moveSegment)
                             Monitor.Exit(moveSegment);
-					    return true;
-				    }
-				    if (startSegment != moveSegment)
-					    Monitor.Exit(moveSegment);
-			    }
+                        return true;
+                    }
+                    if (startSegment != moveSegment)
+                        Monitor.Exit(moveSegment);
+                }
 
-			    ++moveBacket;
-		    }
+                ++moveBacket;
+            }
 
             return false;
-	    }
-
-        public HopscotchMap<TKey, TValue> Clone()
-        {
-            return new HopscotchMap<TKey, TValue>(this);
         }
 
         private bool BucketContainsKey(ref Bucket bucket, TKey key, int keyHash)
@@ -182,101 +162,94 @@ namespace HopscotchHashMap
         {
             int hash = keyComparer.GetHashCode(key) & HashMask;
 
-		    // check if already contains
+            // check if already contains
             Segment segment = segments[(hash >> segmentShift) & segmentMask];
             int elmAryBucket = hash & bucketMask;
             uint hopInfo = table[elmAryBucket].hopInfo;
 
-		    if (hopInfo == 0)
-			    return false;
-		    else if (hopInfo == 1u)
-            {
-			    return BucketContainsKey(ref table[elmAryBucket], key, hash);
-		    }
-            //else if(2U == hopInfo)
-            //{
-            //    int currElmBucket = elmAryBucket + 1;
-            //    return BucketContainsKey(ref table[currElmBucket], key, hash);
-            //}
+            if (hopInfo == 0)
+                return false;
+            else if (hopInfo == 1u)
+                return BucketContainsKey(ref table[elmAryBucket], key, hash);
 
             int startTimestamp = Volatile.Read(ref segment.timestamp);
-		    while (hopInfo != 0)
+            while (hopInfo != 0)
             {
-			    int i = IndexOfLeastSignificantBitSet(hopInfo);
+                int i = IndexOfLeastSignificantBitSet(hopInfo);
                 int currElmBucket = elmAryBucket + i;
-			    if (BucketContainsKey(ref table[currElmBucket], key, hash))
-				    return true;
-			    hopInfo &= ~(1u << i);
-		    }
+                if (BucketContainsKey(ref table[currElmBucket], key, hash))
+                    return true;
+                hopInfo &= ~(1u << i);
+            }
             
-		    if (Volatile.Read(ref segment.timestamp) == startTimestamp)
-			    return false;
+            if (Volatile.Read(ref segment.timestamp) == startTimestamp)
+                return false;
             
-		    int currBucket = hash & bucketMask;
-		    for (int i = 0; i < HopRange; ++i, ++currBucket)
+            int currBucket = hash & bucketMask;
+            for (int i = 0; i < HopRange; ++i, ++currBucket)
             {
-			    if (BucketContainsKey(ref table[currBucket], key, hash))
-				    return true;
-		    }
-		    return false;
-	    }
+                if (BucketContainsKey(ref table[currBucket], key, hash))
+                    return true;
+            }
+            return false;
+        }
 
         public PutResult PutIfAbsent(TKey key,  TValue data)
         {
             int hash = keyComparer.GetHashCode(key) & HashMask;
 
-		    // lock hash entry
-		    Segment segment = segments[(hash >> segmentShift) & segmentMask];
+            // lock hash entry
+            Segment segment = segments[(hash >> segmentShift) & segmentMask];
             Monitor.Enter(segment);
-		    int startBucket = hash & bucketMask;
+            int startBucket = hash & bucketMask;
 
             // check if already contains
             uint hopInfo = table[startBucket].hopInfo;
-		    while (hopInfo != 0)
+            while (hopInfo != 0)
             {
                 int i = IndexOfLeastSignificantBitSet(hopInfo);
                 int currElmBucket = startBucket + i;
-			    if (BucketContainsKey(ref table[currElmBucket], key, hash))
+                if (BucketContainsKey(ref table[currElmBucket], key, hash))
                 {
                     Monitor.Exit(segment);
-				    return PutResult.AlreadyExists;
-			    }
+                    return PutResult.AlreadyExists;
+                }
                 hopInfo &= ~(1u << i);
-		    }
+            }
 
             // look for free bucket
             int freeBucket = startBucket;
             int freeDistance = 0;
-		    for(; freeDistance < InsertRange; ++freeDistance, ++freeBucket)
+            for(; freeDistance < InsertRange; ++freeDistance, ++freeBucket)
             {
                 int bucketHash = table[freeBucket].hash;
                 if (bucketHash == EmptyHash && Interlocked.CompareExchange(ref table[freeBucket].hash, BusyHash, EmptyHash) == EmptyHash)
                     break;
-		    }
+            }
 
-		    // place new key
-		    if (freeDistance < InsertRange)
+            // place new key
+            if (freeDistance < InsertRange)
             {
-			    do
+                do
                 {
-				    if (freeDistance < HopRange)
+                    if (freeDistance < HopRange)
                     {
                         table[freeBucket].data = data;
                         table[freeBucket].key = key;
                         table[freeBucket].hash = hash;
-					    table[startBucket].hopInfo |= (1u << freeDistance);
-					    Monitor.Exit(segment);
-					    return PutResult.Success;
-				    }
-			    }
+                        table[startBucket].hopInfo |= (1u << freeDistance);
+                        Monitor.Exit(segment);
+                        return PutResult.Success;
+                    }
+                }
                 while (FindCloserFreeBacket(segment, ref freeBucket, ref freeDistance));
-		    }
+            }
 
             // need to resize
             //throw new InvalidOperationException($"Resize is not implemented yet (current size: {Count})");
             Monitor.Exit(segment);
             return PutResult.Overflow;
-	    }
+        }
 
         public bool Remove(TKey key, out TValue data)
         {
@@ -285,15 +258,15 @@ namespace HopscotchHashMap
             // check if already contains
             Segment segment = segments[(hash >> segmentShift) & segmentMask];
             Monitor.Enter(segment);
-		    int startBucket = hash & bucketMask;
+            int startBucket = hash & bucketMask;
             uint hopInfo = table[startBucket].hopInfo;
 
-		    if (hopInfo == 0)
+            if (hopInfo == 0)
             {
-			    Monitor.Exit(segment);
+                Monitor.Exit(segment);
                 data = default(TValue);
-			    return false;
-		    }
+                return false;
+            }
             else if (hopInfo == 1u)
             {
                 if (BucketContainsKey(ref table[startBucket], key, hash))
@@ -312,43 +285,43 @@ namespace HopscotchHashMap
                     data = default(TValue);
                     return false;
                 }
-		    }
+            }
 
-		    do
+            do
             {
-			    int i = IndexOfLeastSignificantBitSet(hopInfo);
+                int i = IndexOfLeastSignificantBitSet(hopInfo);
                 if (i < 0) { throw new InvalidOperationException(); }
                 int currElmBucket = startBucket + i;
-			    if (BucketContainsKey(ref table[currElmBucket], key, hash))
+                if (BucketContainsKey(ref table[currElmBucket], key, hash))
                 {
-				    uint mask = 1u << i;
-				    table[startBucket].hopInfo &= ~mask;
-				    table[currElmBucket].hash = EmptyHash;
+                    uint mask = 1u << i;
+                    table[startBucket].hopInfo &= ~mask;
+                    table[currElmBucket].hash = EmptyHash;
                     table[currElmBucket].key = default(TKey);
-				    data = table[currElmBucket].data;
+                    data = table[currElmBucket].data;
                     table[currElmBucket].data = default(TValue);
                     Monitor.Exit(segment);
-				    return true;
-			    }
+                    return true;
+                }
 
-			    hopInfo &= ~(1U << i);
-		    }
+                hopInfo &= ~(1U << i);
+            }
             while (hopInfo != 0);
 
             Monitor.Exit(segment);
             data = default(TValue);
             return false;
-	    }
+        }
 
         static uint NearestPowerOfTwo(uint value)
         {
             uint rc = 1;
-		    while (rc < value)
+            while (rc < value)
             {
-			    rc <<= 1;
-		    }
-		    return rc;
-	    }
+                rc <<= 1;
+            }
+            return rc;
+        }
 
         static int CalcDivideShift(uint value)
         {
